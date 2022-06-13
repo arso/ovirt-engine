@@ -20,7 +20,9 @@
     <extension module="org.jboss.as.logging"/>
     <extension module="org.jboss.as.naming"/>
     <extension module="org.jboss.as.remoting"/>
+    <!--
     <extension module="org.jboss.as.security"/>
+    -->
     <extension module="org.jboss.as.transactions"/>
     <extension module="org.jboss.as.weld"/>
     {% if config.getboolean('KEYCLOAK_BUNDLED') %}
@@ -28,6 +30,7 @@
     {% endif %}
     <extension module="org.wildfly.extension.batch.jberet"/>
     <extension module="org.wildfly.extension.bean-validation"/>
+    <extension module="org.wildfly.extension.elytron"/>
     <extension module="org.wildfly.extension.io"/>
     <extension module="org.wildfly.extension.request-controller"/>
     <extension module="org.wildfly.extension.security.manager"/>
@@ -40,51 +43,12 @@
   </system-properties>
 
   <management>
-    <security-realms>
-      <!-- We need to enable the management subsystem because it is an indirect
-           dependency of the Infinispan subsystem (since version 7.2 of the
-           application server) but at the same time we don't want anyone (other
-           than the root and ovirt users) to be able to connect to the
-           management port, so we just use an empty users file: -->
-      <security-realm name="management">
-        <plug-ins>
-          <plug-in module="org.ovirt.engine.core.auth-plugin"/>
-        </plug-ins>
-        <authentication>
-          <plug-in name="OvirtAuth" mechanism="PLAIN"/>
-        </authentication>
-      </security-realm>
-
-      <!-- This is required by the HTTPS listener: -->
-      <security-realm name="https">
-        <server-identities>
-          <ssl>
-            <keystore
-                alias="1"
-                key-password="mypass"
-                keystore-password="mypass"
-                path="{{ config.get('ENGINE_PKI') }}/keys/jboss.p12"
-                provider="PKCS12"/>
-          </ssl>
-        </server-identities>
-      </security-realm>
-
-      <!-- This is required by http-remoting-connector -->
-      <security-realm name="ApplicationRealm">
-        <authentication>
-          <properties path="/dev/null"/>
-        </authentication>
-        <authorization>
-          <properties path="/dev/null"/>
-        </authorization>
-      </security-realm>
-    </security-realms>
 
     <management-interfaces>
-      <native-interface security-realm="management">
+      <native-interface>
         <socket-binding native="management-native"/>
       </native-interface>
-      <http-interface security-realm="management">
+      <http-interface>
         <http-upgrade enabled="true"/>
         <socket-binding http="management"/>
       </http-interface>
@@ -754,44 +718,71 @@
 
     <subsystem xmlns="urn:jboss:domain:remoting:4.0">
       <endpoint worker="default"/>
-      <http-connector name="http-remoting-connector" connector-ref="http-remoting" security-realm="ApplicationRealm"/>
+      <http-connector name="http-remoting-connector" connector-ref="http-remoting" />
     </subsystem>
 
     <subsystem xmlns="urn:jboss:domain:resource-adapters:4.0"/>
 
-    <subsystem xmlns="urn:jboss:domain:security:1.2">
+    <subsystem xmlns="urn:wildfly:elytron:15.1" final-providers="combined-providers" disallowed-providers="OracleUcrypto">
+      <providers>
+        <aggregate-providers name="combined-providers">
+            <providers name="elytron"/>
+            <providers name="openssl"/>
+        </aggregate-providers>
+        <provider-loader name="elytron" module="org.wildfly.security.elytron"/>
+        <provider-loader name="openssl" module="org.wildfly.openssl"/>
+      </providers>
+
       <security-domains>
-        <security-domain name="other" cache-type="default">
+        <security-domain name="other">
+              <realm name="otherRealm">
+<!--
+                    <login-module code="Remoting" flag="optional">
+                      <module-option name="password-stacking" value="useFirstPass"/>
+                    </login-module>
+-->
+              </realm>
+      <!--
           <authentication>
             <login-module code="Remoting" flag="optional">
               <module-option name="password-stacking" value="useFirstPass"/>
             </login-module>
           </authentication>
+        -->
         </security-domain>
-        <security-domain name="jboss-web-policy" cache-type="default">
+        <security-domain name="jboss-web-policy">
+<!--
           <authorization>
             <policy-module code="Delegating" flag="required"/>
           </authorization>
+-->
         </security-domain>
-        <security-domain name="jboss-ejb-policy" cache-type="default">
+        <security-domain name="jboss-ejb-policy">
+<!--
           <authorization>
             <policy-module code="Delegating" flag="required"/>
           </authorization>
+-->
         </security-domain>
         <security-domain name="oVirtKerb">
+<!--
           <authentication>
             <login-module code="com.sun.security.auth.module.Krb5LoginModule" flag="required"/>
           </authentication>
+-->
         </security-domain>
         <security-domain name="oVirtKerbDebug">
+<!--
           <authentication>
             <login-module code="com.sun.security.auth.module.Krb5LoginModule" flag="required">
               <module-option name="debug" value="true"/>
             </login-module>
           </authentication>
+-->
         </security-domain>
         <!-- This security-domain enables authentication via ticket cache or keytab. -->
         <security-domain name="oVirtKerbAAA">
+<!--
           <authentication>
             <login-module code="com.sun.security.auth.module.Krb5LoginModule" flag="required">
               <module-option name="useTicketCache" value="{{ config.getboolean('AAA_JAAS_USE_TICKET_CACHE') }}"/>
@@ -809,8 +800,50 @@
               <module-option name="doNotPrompt" value="true"/>
             </login-module>
           </authentication>
+-->
         </security-domain>
       </security-domains>
+
+    <security-realms>
+      <!-- We need to enable the management subsystem because it is an indirect
+           dependency of the Infinispan subsystem (since version 7.2 of the
+           application server) but at the same time we don't want anyone (other
+           than the root and ovirt users) to be able to connect to the
+           management port, so we just use an empty users file: -->
+      <security-realm name="management">
+        <plug-ins>
+          <plug-in module="org.ovirt.engine.core.auth-plugin"/>
+        </plug-ins>
+        <authentication>
+          <plug-in name="OvirtAuth" mechanism="PLAIN"/>
+        </authentication>
+      </security-realm>
+
+      <!-- This is required by the HTTPS listener: -->
+      <security-realm name="https">
+        <server-identities>
+          <ssl>
+            <keystore
+                alias="1"
+                key-password="mypass"
+                keystore-password="mypass"
+                path="{{ config.get('ENGINE_PKI') }}/keys/jboss.p12"
+                provider="PKCS12"/>
+          </ssl>
+        </server-identities>
+      </security-realm>
+
+      <!-- This is required by http-remoting-connector -->
+      <security-realm name="ApplicationRealm">
+        <authentication>
+          <properties path="/dev/null"/>
+        </authentication>
+        <authorization>
+          <properties path="/dev/null"/>
+        </authorization>
+      </security-realm>
+    </security-realms>
+
     </subsystem>
 
     <subsystem xmlns="urn:jboss:domain:transactions:3.0">

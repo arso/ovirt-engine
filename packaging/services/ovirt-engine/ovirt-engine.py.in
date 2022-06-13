@@ -419,7 +419,7 @@ class Daemon(service.Daemon):
             '-Djboss.controller.temp.dir=%s' % jbossTempDir,
             '-jar', jbossModulesJar,
             '-mp', javaModulePath,
-            '-jaxpmodule', 'javax.xml.jaxp-provider',
+            # '-jaxpmodule', 'javax.xml.jaxp-provider',
             'org.jboss.as.standalone',
         ])
 
